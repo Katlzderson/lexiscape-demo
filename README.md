@@ -1,3 +1,14 @@
+---
+title: Lexiscape
+emoji: 🪐
+colorFrom: green
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: 在连贯情境中理解、辨析并运用英语多重词义
+---
+
 # 辞之境 · Lexiscape
 
 Lexiscape 是一个场景驱动的一词多义学习 Demo。用户提交一组英语单词或固定短语后，系统会在运行时获取常用义项，将它们编入同一篇英文故事，并通过独立语义校验确认每一次词语出现的实际含义。用户还可以在新情境中完成英文造句并获得分项反馈。
@@ -95,4 +106,52 @@ npm test       # 单元测试
 
 ## 发布提醒
 
-本项目允许用户无需账号直接使用。虽然模型费用由用户自己的 Key 承担，公开部署前仍应增加 IP 限流和并发限制，防止无效请求占用服务器资源。Railway 或 Render 使用 `npm run build` 构建、`npm start` 启动，并只需设置 `NODE_ENV=production`，无需配置任何模型 Key。
+本项目允许用户无需账号直接使用。虽然模型费用由用户自己的 Key 承担，公开部署前仍应增加 IP 限流和并发限制，防止无效请求占用服务器资源。
+
+## 部署到 Hugging Face Spaces
+
+本仓库已经包含 Docker Space 所需的 `Dockerfile` 和 README 配置。部署者不需要配置任何模型 API Key。
+
+### 1. 创建 Space
+
+1. 注册或登录 [Hugging Face](https://huggingface.co/)。
+2. 打开 [New Space](https://huggingface.co/new-space)。
+3. `Space name` 填写 `lexiscape-demo`，也可以使用其他未占用名称。
+4. `License` 按你的开源授权计划选择；尚未决定时不要随意声明许可证。
+5. `Select the Space SDK` 选择 `Docker`，模板选择 `Blank`。
+6. `Space hardware` 选择免费的 `CPU basic`。
+7. Visibility 选择 `Public`，然后点击 `Create Space`。
+
+### 2. 上传代码
+
+创建完成后，在本机项目目录执行：
+
+```powershell
+git remote add space https://huggingface.co/spaces/<你的HuggingFace用户名>/lexiscape-demo
+git push space main
+```
+
+Hugging Face 会要求用户名和 Access Token。Token 需要在 `Settings → Access Tokens` 中创建，并至少具有目标 Space 的写入权限；密码提示处应填写 Token，而不是账号密码。不要把 Token 写入任何文件。
+
+也可以在 Space 页面选择 `Files → Add file → Upload files`，上传整个仓库中除 `.git`、`node_modules`、`dist` 和 `.env` 之外的文件。
+
+### 3. 等待构建
+
+进入 Space 的 `Build` 或 `Logs` 页面。平台会依次安装依赖、执行 `npm run build`，然后在容器的 `7860` 端口启动服务。出现 `Running` 后即可通过以下地址访问：
+
+```text
+https://<用户名>-lexiscape-demo.hf.space
+```
+
+首次访问或免费实例休眠后的唤醒可能较慢。中国大陆网络对 Hugging Face 的可达性并无保证，发布后应分别使用电脑和手机网络实测。
+
+### 4. 后续更新
+
+修改代码并推送 GitHub 后，再同步推送 Space：
+
+```powershell
+git push origin main
+git push space main
+```
+
+Space 会自动重新构建。不要在 Space 的 Variables 或 Secrets 中添加用户模型 Key；Lexiscape 的模型凭据由每位用户在页面中临时填写。

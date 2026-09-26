@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="辞之境 Lexiscape：让词语主动进入情境，在故事中理解、辨析并运用多重词义">
+  <title>辞之境 · Lexiscape</title>
+  <link rel="icon" href="/lexiscape-mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="辞之境首页"><img class="brand-mark" src="/lexiscape-mark.svg" alt=""><span class="brand-name"><strong>辞之境</strong><small>LEXISCAPE</small></span></a>
+      <nav class="view-tabs" aria-label="主导航">
+        <button class="tab active" data-view="learn">学习</button>
+        <button class="tab" data-view="contexts">语境轨迹</button>
+        <button class="tab" data-view="progress">学习进度</button>
+      </nav>
+      <div class="top-actions">
+        <span id="serviceStatus" class="service-status"><i data-lucide="circle"></i>检测服务</span>
+        <button id="exportBtn" class="icon-btn" title="导出学习状态" aria-label="导出学习状态"><i data-lucide="download"></i></button>
+        <button id="resetBtn" class="icon-btn" title="重置学习状态" aria-label="重置学习状态"><i data-lucide="rotate-ccw"></i></button>
+      </div>
+    </header>
+
+    <main>
+      <section id="learnView" class="view active">
+        <div id="composer" class="composer-band">
+          <div class="composer-inner">
+            <div class="composer-copy">
+              <span class="kicker">NEW SCENE · BATCH <b id="nextBatchIndex">01</b></span>
+              <h1>把今天的词，放进同一段经历。</h1>
+              <p>输入 3–20 个英文词条，单词与短语分别处理。系统会获取每个精确词条自身的全部常用词义，并把它们写进同一个故事。</p>
+            </div>
+            <form id="batchForm" class="word-form">
+              <label for="wordInput">今日词批</label>
+              <textarea id="wordInput" rows="4" autocomplete="off" spellcheck="false" placeholder="每行一个词条，或用逗号分隔；短语保留空格" required></textarea>
+              <div class="form-row">
+                <label>水平<select id="levelInput"><option>A2</option><option selected>B1</option><option>B2</option><option>C1</option></select></label>
+                <label>目标<select id="examInput"><option>通用</option><option>CET4</option><option>CET6</option><option>考研</option><option>雅思</option><option>托福</option><option>GRE</option></select></label>
+                <label>篇幅<select id="lengthInput"><option value="short">短</option><option value="medium" selected>中</option><option value="long">长</option></select></label>
+                <button class="primary-btn" type="submit"><span>生成场景</span><i data-lucide="arrow-up-right"></i></button>
+              </div>
+              <p id="inputHint" class="form-hint">等待输入</p>
+            </form>
+          </div>
+        </div>
+
+        <div id="loadingPanel" class="loading-panel hidden" aria-live="polite">
+          <div class="loading-orbit"><span></span></div>
+          <div><span class="kicker">PIPELINE</span><h2 id="loadingTitle">获取义项</h2><p id="loadingDetail">正在连接运行时数据服务…</p></div>
+          <ol id="pipelineSteps"><li class="active">获取义项</li><li>计算容量</li><li>生成场景</li><li>独立校验</li><li>保存批次</li></ol>
+        </div>
+
+        <div id="errorPanel" class="notice error hidden" role="alert"><i data-lucide="circle-alert"></i><div><strong>本次未能生成</strong><p id="errorMessage"></p></div></div>
+
+        <div id="workspace" class="workspace hidden">
+          <button id="homeBtn" class="secondary-btn learning-back-btn" type="button"><i data-lucide="arrow-left"></i>返回</button>
+          <section class="scene-column">
+            <div id="degradationBanner" class="notice warning hidden"></div>
+            <header class="scene-header">
+              <div><span id="batchMeta" class="kicker"></span><h2 id="sceneTitle"></h2><p id="sceneTitleEn" class="scene-title-en"></p></div>
+              <div class="scene-actions">
+                <label class="switch"><input id="annotationToggle" type="checkbox" checked><span></span>显示义项标注</label>
+              </div>
+            </header>
+            <div class="coverage-strip">
+              <div><strong id="coveredCount">0</strong><span>已覆盖目标义项</span></div>
+              <div><strong id="targetCount">0</strong><span>本批目标义项</span></div>
+              <div><strong id="allSenseCount">0 项</strong><span id="allSenseLabel">输入词条完整义项</span></div>
+              <div class="coverage-meter"><span id="coverageBar"></span></div>
+            </div>
+            <article id="sceneText" class="scene-text"></article>
+            <aside id="occurrencePanel" class="occurrence-panel hidden" aria-live="polite"></aside>
+            <details class="summary-panel"><summary>查看中文场景大意 <i data-lucide="chevron-down"></i></summary><p id="sceneSummary"></p></details>
+          </section>
+
+          <aside class="sense-column">
+            <div class="sense-toolbar">
+              <div><span class="kicker">SENSE MAP</span><h3>义项对照</h3></div>
+              <div class="filter-group" aria-label="义项筛选"><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="covered">已出现</button><button class="filter" data-filter="pending">未覆盖</button></div>
+            </div>
+            <div id="senseList" class="sense-list"></div>
+          </aside>
+          <section class="drill-section">
+            <header><span class="kicker">ACTIVE RECALL</span><h2>换一个情境，再用一次</h2></header>
+            <div id="drillList" class="drill-list"></div>
+          </section>
+          <details class="debug-panel"><summary>运行指标与校验轨迹</summary><pre id="debugOutput"></pre></details>
+        </div>
+      </section>
+
+      <section id="contextsView" class="view content-view">
+        <header class="page-heading"><span class="kicker">CONTEXT ATLAS</span><h1>同一个词，不同的现场。</h1><p>选择一个词，查看它如何在多批场景中改变含义。</p></header>
+        <div id="contextContent" class="empty-state"><i data-lucide="layers-3"></i><h2>还没有跨场景记录</h2><p>完成第一个词批后，义项轨迹会出现在这里。</p></div>
+      </section>
+
+      <section id="progressView" class="view content-view">
+        <header class="page-heading"><span class="kicker">LEARNING SIGNALS</span><h1>按义项，看见真实进度。</h1><p>只统计经独立语义校验确认的词条与义项。</p></header>
+        <div id="progressContent" class="empty-state"><i data-lucide="chart-no-axes-column-increasing"></i><h2>尚无学习数据</h2><p>完成一个批次后再回来查看。</p></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="confirmDialog"><div class="dialog-icon"><i data-lucide="triangle-alert"></i></div><h2>重置全部学习状态？</h2><p>场景、义项轨迹和练习记录都会被清除，此操作无法撤销。</p><div><button id="cancelReset" class="secondary-btn">取消</button><button id="confirmReset" class="danger-btn">确认重置</button></div></dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

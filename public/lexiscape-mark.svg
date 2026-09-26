@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Lexiscape</title>
+  <desc id="desc">A luminous word particle entering a contextual portal</desc>
+  <defs>
+    <linearGradient id="portal" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#26E0C3"/>
+      <stop offset="1" stop-color="#0B776C"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="12" y1="48" x2="54" y2="14" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F05A3C"/>
+      <stop offset="1" stop-color="#FFD45A"/>
+    </linearGradient>
+  </defs>
+  <path fill="#14201D" d="M32 2 56 16v32L32 62 8 48V16L32 2Z"/>
+  <path fill="none" stroke="url(#portal)" stroke-width="4" d="M34 13c10 0 17 8 17 19s-7 19-17 19c-8 0-14-5-16-13"/>
+  <path fill="none" stroke="#E9FFF9" stroke-width="3.5" stroke-linecap="square" d="M29 20v24h12"/>
+  <path fill="none" stroke="url(#signal)" stroke-width="3" stroke-linecap="round" d="M9 40c8-8 16-11 27-11 7 0 13-2 19-7"/>
+  <circle cx="12" cy="38" r="4" fill="#F05A3C"/>
+  <circle cx="51" cy="23" r="3" fill="#FFD45A"/>
+  <circle cx="19" cy="17" r="2" fill="#E9FFF9"/>
+</svg>

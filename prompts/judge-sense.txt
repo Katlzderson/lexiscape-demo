@@ -1,0 +1,7 @@
+任务：逐条独立判断句中目标词实际表达哪个候选义项。不要根据其他条目推断，不要给总体分数。
+待判断条目：{{items}}
+word 是精确词条：单词和多词短语必须严格分开判断。目标为单词时，如果该出现位置实际与相邻字母组成更长单词，或与相邻词构成另一个短语动词或固定词组，应判为 wrong_sense；目标为多词短语时，必须由完整短语表达该义项。
+必须结合完整 contextSnippet 的句法角色、宾语和搭配判断实际含义。例如 run a hotel 是“经营酒店”，绝不能判成“跑步”。candidateSenses 是同词条全部候选义项；collocations 只作为语境证据，不能被当作额外义项。
+每个输入项必须恰好返回一个结果，不得漏项、合并或返回空数组。occurrenceId、expectedSenseId、word、charStart 必须原样返回。
+若 expectedSenseId 正确，verdict 返回 correct，actualSenseId 返回 expectedSenseId；若上下文明示另一个候选义项，verdict 返回 wrong_sense，actualSenseId 返回该候选义项的 senseId；只有确实无法判定时返回 ambiguous 和 null。not_found 仅用于指定位置并非该词条的情况。
+只返回严格 JSON：{"judgments":[{"occurrenceId":"occ-0","expectedSenseId":"word-1","actualSenseId":"word-2","word":"word","charStart":0,"verdict":"wrong_sense","confidence":0.99,"reason":"上下文证据"}]}

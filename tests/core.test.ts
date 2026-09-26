@@ -74,6 +74,15 @@ test("generation reconciliation never matches inside a longer word", () => {
   assert.equal(reconciled.occurrences[0].charStart, 31);
 });
 
+test("hyphenated compounds can contain an exact target word", () => {
+  const result = base("In mid-June, alpha works as expected. " + "alpha ".repeat(150));
+  result.occurrences = [{ ...result.occurrences[0], word: "mid", surfaceForm: "mid", senseId: "mid-1", charStart: 3, charEnd: 6 }];
+  const midSense = [{ ...senses[0], word: "mid", senseId: "mid-1" }];
+  const batch = normalizeBatch(["mid"], 1, options);
+  const report = verifyPosition(reconcileGeneration(result), batch, midSense, config.sceneLength.short, config);
+  assert.equal(report.checks.find((check) => check.code === "V-01")?.passed, true);
+});
+
 test("best effort scoring keeps unaccepted candidates eligible", () => {
   const report = {
     positional: { passed: false, checks: [] },

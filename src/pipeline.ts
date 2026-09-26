@@ -135,7 +135,7 @@ export function verifiedSenseIds(scene: GenerationResult, senses: Sense[], judgm
     if (!verified.has(key) || !sense || sense.word !== occurrence.word || !inRange || charStart < previousEnd || scene.sceneText.slice(charStart, charEnd) !== surfaceForm) continue;
     const before = scene.sceneText[charStart - 1] ?? "";
     const after = scene.sceneText[charEnd] ?? "";
-    if (/[A-Za-z'-]/.test(before) || /[A-Za-z'-]/.test(after)) continue;
+    if (/[A-Za-z]/.test(before) || /[A-Za-z]/.test(after)) continue;
     ids.add(occurrence.senseId);
     previousEnd = charEnd;
   }

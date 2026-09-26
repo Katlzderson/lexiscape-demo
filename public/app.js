@@ -164,7 +164,6 @@ function renderBatch(batch) {
   renderScene(batch); renderSenses(batch); renderDrills(batch);
   $("#debugOutput").textContent = JSON.stringify({ trace:batch.trace, verification:batch.report, dispersal:batch.deferrals.dispersalCheck, metrics:metricsFor(batch) }, null, 2);
   lucide.createIcons(); window.scrollTo({ top:0, behavior:"smooth" });
-  if (!annotation.coveredCount && batch.scene.occurrences.length) void reverifyAnnotations(batch);
 }
 
 async function reverifyAnnotations(batch) {
@@ -193,7 +192,7 @@ function renderableOccurrences(batch) {
     const inRange = Number.isInteger(charStart) && Number.isInteger(charEnd) && charStart >= 0 && charStart < charEnd && charEnd <= batch.scene.sceneText.length;
     if (!verified.has(key) || !sense || sense.word !== occurrence.word || !inRange || charStart < previousEnd || batch.scene.sceneText.slice(charStart,charEnd) !== surfaceForm) return false;
     const before = batch.scene.sceneText[charStart-1] ?? "", after = batch.scene.sceneText[charEnd] ?? "";
-    if (/[A-Za-z'-]/.test(before) || /[A-Za-z'-]/.test(after)) return false;
+    if (/[A-Za-z]/.test(before) || /[A-Za-z]/.test(after)) return false;
     previousEnd = charEnd; return true;
   });
 }
@@ -313,7 +312,7 @@ function renderProgress() {
   target.innerHTML=`<div class="metric-grid"><div class="metric"><strong>${covered.length}</strong><span>已覆盖义项</span></div><div class="metric"><strong>${pending}</strong><span>待学义项</span></div><div class="metric"><strong>${repeated}</strong><span>跨场景重复义项</span></div><div class="metric"><strong>${state.profile.streak}</strong><span>连续学习天数</span></div></div><section class="distribution"><h2>多语境接触分布</h2>${["1 个场景","2 个场景","3 个及以上"].map((label,index)=>`<div class="bar-row"><span>${label}</span><div class="bar-track"><span style="width:${distribution[index]/max*100}%"></span></div><strong>${distribution[index]}</strong></div>`).join("")}</section><table class="history-table"><thead><tr><th>批次</th><th>场景</th><th>词数</th><th>覆盖率</th><th>尝试</th></tr></thead><tbody>${state.batches.map((batch)=>`<tr><td>#${batch.batch.batchIndex}</td><td>${escapeHtml(batch.scene.sceneTitleZh)}</td><td>${batch.batch.words.length}</td><td>${Math.round(annotationCoverage(batch).coverageRate*100)}%</td><td>${batch.report.attempt}</td></tr>`).join("")}</tbody></table>`;
 }
 
-function metricsFor(batch) { const judgments=batch.report.semantic.judgments; return { coverage_rate:batch.report.semantic.coverageRate, first_pass_rate:batch.report.attempt===1?1:0, avg_attempts:batch.report.attempt, wrong_sense_rate:judgments.length?judgments.filter((item)=>item.sourceSenseId&&item.sourceSenseId!==item.senseId).length/judgments.length:0, ambiguous_rate:judgments.length?judgments.filter((item)=>item.verdict==="ambiguous").length/judgments.length:0, deferral_rate:batch.senses.length?batch.deferrals.entries.length/batch.senses.length:0, dispersal_compliance:batch.deferrals.dispersalCheck.allCompliant?1:0, degradation_rate:batch.degradation?1:0 }; }
+function metricsFor(batch) { const judgments=batch.report.semantic.judgments,attemptsRun=batch.trace.filter((item)=>item.startsWith("生成与校验：第 ")).length; return { coverage_rate:batch.report.semantic.coverageRate, accepted:batch.report.accepted?1:0, first_pass_rate:batch.report.accepted&&batch.report.attempt===1?1:0, selected_attempt:batch.report.attempt, attempts_run:attemptsRun, positional_pass_rate:batch.report.positional.passed?1:0, narrative_pass_rate:batch.report.narrative.passed?1:0, language_pass_rate:batch.report.narrative.languagePassed?1:0, wrong_sense_rate:judgments.length?judgments.filter((item)=>item.sourceSenseId&&item.sourceSenseId!==item.senseId).length/judgments.length:0, ambiguous_rate:judgments.length?judgments.filter((item)=>item.verdict==="ambiguous").length/judgments.length:0, deferral_rate:batch.senses.length?batch.deferrals.entries.length/batch.senses.length:0, dispersal_compliance:batch.deferrals.dispersalCheck.allCompliant?1:0, degradation_rate:batch.degradation?1:0 }; }
 function updateStreak() { const today=new Date().toISOString().slice(0,10),last=state.profile.lastStudyDate; if(last!==today){const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);state.profile.streak=last===yesterday?state.profile.streak+1:1;state.profile.lastStudyDate=today;} }
 function exportState() { const url=URL.createObjectURL(storage.export()),anchor=document.createElement("a");anchor.href=url;anchor.download=`scene-lexicon-${new Date().toISOString().slice(0,10)}.json`;anchor.click();URL.revokeObjectURL(url);toast("学习状态已导出"); }
 function resetState() { storage.reset(); state=storage.load(); current=null; $("#confirmDialog").close(); $("#workspace").classList.add("hidden"); $("#composer").classList.remove("hidden"); $("#wordInput").value=""; updateInputHint(); updateBatchIndex(); location.reload(); }

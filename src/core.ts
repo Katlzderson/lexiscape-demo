@@ -40,7 +40,7 @@ export function verifyPosition(result: GenerationResult, batch: BatchInput, sens
     const actual = result.sceneText.slice(occ.charStart, occ.charEnd);
     const before = result.sceneText[occ.charStart - 1] ?? "";
     const after = result.sceneText[occ.charEnd] ?? "";
-    if (actual !== occ.surfaceForm || /[A-Za-z'-]/.test(before) || /[A-Za-z'-]/.test(after)) fail("V-01", { occurrenceIndex: index, expected: `完整词形 ${occ.surfaceForm}`, actual });
+    if (actual !== occ.surfaceForm || /[A-Za-z]/.test(before) || /[A-Za-z]/.test(after)) fail("V-01", { occurrenceIndex: index, expected: `完整词形 ${occ.surfaceForm}`, actual });
     if (!batch.words.includes(occ.word)) fail("V-02", { occurrenceIndex: index, word: occ.word, expected: "batch word", actual: occ.word });
     if (senseMap.get(occ.senseId)?.word !== occ.word) fail("V-03", { occurrenceIndex: index, senseId: occ.senseId, expected: "sense of word", actual: occ.senseId });
     const snippetStart = result.sceneText.indexOf(occ.contextSnippet);
@@ -75,7 +75,7 @@ export function reconcileGeneration(result: GenerationResult): GenerationResult 
       if (found < 0) break;
       const before = result.sceneText[found - 1] ?? "";
       const after = result.sceneText[found + occurrence.surfaceForm.length] ?? "";
-      if (!usedStarts.has(found) && !/[A-Za-z'-]/.test(before) && !/[A-Za-z'-]/.test(after)) candidates.push(found);
+      if (!usedStarts.has(found) && !/[A-Za-z]/.test(before) && !/[A-Za-z]/.test(after)) candidates.push(found);
       searchFrom = found + Math.max(1, occurrence.surfaceForm.length);
     }
     const charStart = candidates.sort((left, right) => Math.abs(left - occurrence.charStart) - Math.abs(right - occurrence.charStart))[0] ?? occurrence.charStart;

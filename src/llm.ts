@@ -44,6 +44,22 @@ export function currentLlmCacheScope(): string {
   return `${credentials.provider}:${credentials.model}`;
 }
 
+export class LlmServiceError extends Error {
+  constructor(public readonly status: number) {
+    super(LlmServiceError.messageFor(status));
+    this.name = "LlmServiceError";
+  }
+
+  private static messageFor(status: number): string {
+    if (status === 401 || status === 403) return `模型服务返回 ${status}：API Key 无效或没有该模型的访问权限`;
+    if (status === 402) return "模型服务返回 402：账户余额不足或尚未开通计费，请前往供应商控制台检查余额与支付状态";
+    if (status === 404) return "模型服务返回 404：模型名称不存在或当前供应商不提供该模型";
+    if (status === 429) return "模型服务返回 429：请求过于频繁或账户额度已用尽，请稍后再试";
+    if (status >= 500) return `模型服务暂时不可用（${status}），请稍后再试`;
+    return `模型服务返回 ${status}，请检查供应商、模型名称和请求权限`;
+  }
+}
+
 export async function renderPrompt(path: string, values: Record<string, unknown>): Promise<string> {
   let template = await readFile(resolve(process.cwd(), path), "utf8");
   for (const [key, value] of Object.entries(values)) template = template.replaceAll(`{{${key}}}`, typeof value === "string" ? value : JSON.stringify(value, null, 2));
@@ -69,7 +85,7 @@ export async function callLlm(prompt: string, temperature: number = config.provi
         messages: [{ role: "user", content: prompt }],
       }),
     });
-    if (!response.ok) throw new Error(`模型服务返回 ${response.status}，请检查供应商、模型名称和 API Key`);
+    if (!response.ok) throw new LlmServiceError(response.status);
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new Error("模型服务未返回内容");

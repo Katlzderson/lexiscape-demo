@@ -117,7 +117,7 @@
       <h2>连接你的模型</h2>
       <p>配置仅保存在当前页面内存中，刷新或关闭页面即清除。调用期间，密钥会经 Lexiscape 服务端临时转发给你选择的模型供应商，但不会写入学习记录、服务器存储或日志。</p>
       <label>模型供应商<select id="providerInput" required></select></label>
-      <label>模型名称<input id="modelInput" type="text" maxlength="120" pattern="[A-Za-z0-9._:/-]+" spellcheck="false" autocomplete="off" placeholder="例如：供应商控制台中的模型 ID" required></label>
+      <label>模型名称<input id="modelInput" type="text" maxlength="120" spellcheck="false" autocomplete="off" placeholder="例如：供应商控制台中的模型 ID" required></label>
       <label>API Key<input id="apiKeyInput" type="password" minlength="8" maxlength="512" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true" placeholder="仅供当前页面临时调用" required></label>
       <div class="credential-note"><i data-lucide="shield-check"></i><span>不提供“记住密钥”选项。请只在 HTTPS 网站上输入，并使用限额明确的专用 Key。</span></div>
       <div class="dialog-actions"><button id="disconnectModel" class="secondary-btn hidden" type="button">断开</button><button id="cancelModel" class="secondary-btn" type="button">稍后配置</button><button class="primary-btn" type="submit">仅本次页面使用</button></div>
@@ -125,6 +125,6 @@
   </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/lucide/lucide.min.js"></script>
-  <script type="module" src="/app.js?v=20260927-2"></script>
+  <script type="module" src="/app.js?v=20260927-3"></script>
 </body>
 </html>

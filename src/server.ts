@@ -3,12 +3,12 @@ import { resolve } from "node:path";
 import { ZodError } from "zod";
 import { config } from "./config.js";
 import { normalizeBatch } from "./core.js";
-import { parseLlmCredentials, publicLlmProviders, withLlmCredentials } from "./llm.js";
+import { LlmServiceError, parseLlmCredentials, publicLlmProviders, withLlmCredentials } from "./llm.js";
 import { createDrillsFromAnnotations, judgeDrillWithLlm, reverifySceneAnnotations, runPipeline } from "./pipeline.js";
 import type { ExamTarget, GenerationResult, Judgment, LengthPreference, Level, Sense, VerificationReport } from "./types.js";
 
 const app = express();
-const errorStatus = (error: unknown) => error instanceof ZodError ? 400 : 502;
+const errorStatus = (error: unknown) => error instanceof ZodError ? 400 : error instanceof LlmServiceError ? error.status : 502;
 const errorMessage = (error: unknown) => error instanceof ZodError ? "模型配置无效，请检查供应商、模型名称和 API Key" : error instanceof Error ? error.message : String(error);
 app.use(express.json({ limit: "1mb" }));
 app.use((_request, response, next) => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { config } from "../src/config.js";
 import { computeCapacity, computeEffectiveLengthRange, extractOccurrences, normalizeBatch, reconcileGeneration, scheduleDeferrals, verifyPosition } from "../src/core.js";
-import { currentLlmModel, parseLlmCredentials, withLlmCredentials } from "../src/llm.js";
+import { currentLlmModel, LlmServiceError, parseLlmCredentials, withLlmCredentials } from "../src/llm.js";
 import { summarizeSemantic, verificationScore, verifiedSenseIds } from "../src/pipeline.js";
 import type { GenerationResult, Sense, VerificationReport } from "../src/types.js";
 
@@ -156,6 +156,12 @@ test("BYOK credentials only accept registered providers and safe model ids", () 
   assert.throws(() => parseLlmCredentials({ provider: "custom", model: "model", apiKey: "temporary-key" }));
   assert.throws(() => parseLlmCredentials({ provider: "openai", model: "model name", apiKey: "temporary-key" }));
   assert.throws(() => parseLlmCredentials({ provider: "deepseek", model: "deepseek-chat", apiKey: "temporary-key 配置" }));
+});
+
+test("upstream model errors distinguish billing from authentication failures", () => {
+  assert.equal(new LlmServiceError(402).message, "模型服务返回 402：账户余额不足或尚未开通计费，请前往供应商控制台检查余额与支付状态");
+  assert.match(new LlmServiceError(401).message, /API Key 无效/);
+  assert.match(new LlmServiceError(429).message, /请求过于频繁/);
 });
 
 test("concurrent BYOK request contexts do not share model credentials", async () => {

@@ -19,7 +19,7 @@ export type LlmCredentials = { provider: keyof typeof providerRegistry; model: s
 const credentialsSchema = z.object({
   provider: z.enum(Object.keys(providerRegistry) as [keyof typeof providerRegistry, ...(keyof typeof providerRegistry)[]]),
   model: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9._:/-]+$/, "模型名称包含不允许的字符"),
-  apiKey: z.string().trim().min(8, "API Key 长度不足").max(512, "API Key 过长"),
+  apiKey: z.string().trim().min(8, "API Key 长度不足").max(512, "API Key 过长").regex(/^[\x21-\x7E]+$/, "API Key 只能包含半角英文字符，不能包含中文或空格"),
 }).strict();
 
 const credentialContext = new AsyncLocalStorage<LlmCredentials>();

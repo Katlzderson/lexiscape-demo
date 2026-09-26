@@ -65,7 +65,14 @@ function openModelDialog() {
 
 function saveModelConfiguration(event) {
   event.preventDefault();
-  modelCredentials = Object.freeze({ provider:$("#providerInput").value, model:$("#modelInput").value.trim(), apiKey:$("#apiKeyInput").value.trim() });
+  const apiKey = $("#apiKeyInput").value.trim();
+  if (!/^[\x21-\x7E]+$/.test(apiKey)) {
+    $("#apiKeyInput").setCustomValidity("API Key 只能包含半角英文字符，不能包含中文或空格");
+    $("#apiKeyInput").reportValidity();
+    return;
+  }
+  $("#apiKeyInput").setCustomValidity("");
+  modelCredentials = Object.freeze({ provider:$("#providerInput").value, model:$("#modelInput").value.trim(), apiKey });
   $("#apiKeyInput").value = "";
   $("#modelDialog").close(); updateModelStatus(); toast("模型配置仅在当前页面生效");
 }

@@ -122,6 +122,7 @@ test("BYOK credentials only accept registered providers and safe model ids", () 
   assert.equal(parseLlmCredentials({ provider: "openai", model: "gpt-4.1-mini", apiKey: "temporary-key" }).model, "gpt-4.1-mini");
   assert.throws(() => parseLlmCredentials({ provider: "custom", model: "model", apiKey: "temporary-key" }));
   assert.throws(() => parseLlmCredentials({ provider: "openai", model: "model name", apiKey: "temporary-key" }));
+  assert.throws(() => parseLlmCredentials({ provider: "deepseek", model: "deepseek-chat", apiKey: "temporary-key 配置" }));
 });
 
 test("concurrent BYOK request contexts do not share model credentials", async () => {

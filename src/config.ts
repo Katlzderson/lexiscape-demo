@@ -21,13 +21,13 @@ export const config = {
     lengthTolerance: 0.1,
     markerPatterns: ["**", "__", "[[", "{{", "<mark"],
   },
-  generation: { maxRetries: 3, semanticConcurrency: 5 },
+  generation: { revisionPasses: 3, semanticConcurrency: 20 },
   schedule: {
     minBatchGap: 1,
     sortWeights: { examFrequency: 4, commonness: 3, unseen: 5, concrete: 1 },
   },
   provider: {
-    sense: { order: ["dict-api", "llm"] as const, dictionaryEndpoint: "https://api.dictionaryapi.dev/api/v2/entries/en" },
+    sense: { order: ["llm"] as readonly ("dict-api" | "llm")[], dictionaryEndpoint: "https://api.dictionaryapi.dev/api/v2/entries/en" },
     llm: {
       maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 16384),
       jsonAttempts: 2,
@@ -45,6 +45,9 @@ export const config = {
     drill: "prompts/drill.txt",
     summarize: "prompts/summarize.txt",
     senses: "prompts/senses.txt",
+    storyPlan: "prompts/story-plan.txt",
+    storyDraft: "prompts/story-draft.txt",
+    storyRevise: "prompts/story-revise.txt",
   },
 } as const;
 

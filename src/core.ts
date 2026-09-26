@@ -64,6 +64,42 @@ export function splitSentences(text: string): string[] {
   return text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((value) => value.trim()) ?? [];
 }
 
+export function extractOccurrences(sceneText: string, senses: Sense[]): Occurrence[] {
+  const sentenceMatches = [...sceneText.matchAll(/[^.!?]+[.!?]+|[^.!?]+$/g)];
+  const sensesByWord = new Map<string, Sense[]>();
+  for (const sense of senses) sensesByWord.set(sense.word, [...(sensesByWord.get(sense.word) ?? []), sense]);
+  const forms = [...sensesByWord.entries()].flatMap(([word, wordSenses]) =>
+    [...new Set([word, ...wordSenses.flatMap((sense) => sense.surfaceForms ?? [])].map((form) => form.trim()).filter(Boolean))]
+      .map((form) => ({ word, form, senses: wordSenses })),
+  ).sort((left, right) => right.form.length - left.form.length);
+  const matches: Occurrence[] = [];
+  for (const { word, form, senses: wordSenses } of forms) {
+    let searchFrom = 0;
+    while (searchFrom < sceneText.length) {
+      const charStart = sceneText.toLowerCase().indexOf(form.toLowerCase(), searchFrom);
+      if (charStart < 0) break;
+      const charEnd = charStart + form.length;
+      const before = sceneText[charStart - 1] ?? "";
+      const after = sceneText[charEnd] ?? "";
+      const overlaps = matches.some((item) => charStart < item.charEnd && charEnd > item.charStart);
+      if (!overlaps && !/[A-Za-z]/.test(before) && !/[A-Za-z]/.test(after)) {
+        const sentenceIndex = sentenceMatches.findIndex((match) => charStart >= (match.index ?? 0) && charStart < (match.index ?? 0) + match[0].length);
+        matches.push({
+          word,
+          surfaceForm: sceneText.slice(charStart, charEnd),
+          charStart,
+          charEnd,
+          senseId: wordSenses[0].senseId,
+          sentenceIndex,
+          contextSnippet: sentenceIndex >= 0 ? sentenceMatches[sentenceIndex][0].trim() : "",
+        });
+      }
+      searchFrom = charStart + Math.max(1, form.length);
+    }
+  }
+  return matches.sort((left, right) => left.charStart - right.charStart);
+}
+
 export function reconcileGeneration(result: GenerationResult): GenerationResult {
   const sentenceMatches = [...result.sceneText.matchAll(/[^.!?]+[.!?]+|[^.!?]+$/g)];
   const usedStarts = new Set<number>();

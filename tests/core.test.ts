@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { config } from "../src/config.js";
-import { computeCapacity, computeEffectiveLengthRange, normalizeBatch, reconcileGeneration, scheduleDeferrals, verifyPosition } from "../src/core.js";
+import { computeCapacity, computeEffectiveLengthRange, extractOccurrences, normalizeBatch, reconcileGeneration, scheduleDeferrals, verifyPosition } from "../src/core.js";
 import { currentLlmModel, parseLlmCredentials, withLlmCredentials } from "../src/llm.js";
 import { summarizeSemantic, verificationScore, verifiedSenseIds } from "../src/pipeline.js";
 import type { GenerationResult, Sense, VerificationReport } from "../src/types.js";
@@ -81,6 +81,30 @@ test("hyphenated compounds can contain an exact target word", () => {
   const batch = normalizeBatch(["mid"], 1, options);
   const report = verifyPosition(reconcileGeneration(result), batch, midSense, config.sceneLength.short, config);
   assert.equal(report.checks.find((check) => check.code === "V-01")?.passed, true);
+});
+
+test("occurrences are rebuilt from final text without trusting model offsets", () => {
+  const targetSenses = [
+    { ...senses[0], word: "mid", senseId: "mid-1", surfaceForms: ["mid"] },
+    { ...senses[0], word: "fire", senseId: "fire-1", surfaceForms: ["fire", "fired"] },
+  ];
+  const occurrences = extractOccurrences("In mid-June, they fired the engine. A bonfire did not count.", targetSenses);
+  assert.deepEqual(occurrences.map(({ word, surfaceForm, charStart }) => ({ word, surfaceForm, charStart })), [
+    { word: "mid", surfaceForm: "mid", charStart: 3 },
+    { word: "fire", surfaceForm: "fired", charStart: 18 },
+  ]);
+});
+
+test("occurrence extraction prefers an exact phrase over an overlapping word", () => {
+  const targetSenses = [
+    { ...senses[0], word: "pass", senseId: "pass-1" },
+    { ...senses[0], word: "pass over", senseId: "pass-over-1" },
+  ];
+  const occurrences = extractOccurrences("They pass over the bridge, then pass the gate.", targetSenses);
+  assert.deepEqual(occurrences.map(({ word, surfaceForm }) => ({ word, surfaceForm })), [
+    { word: "pass over", surfaceForm: "pass over" },
+    { word: "pass", surfaceForm: "pass" },
+  ]);
 });
 
 test("best effort scoring keeps unaccepted candidates eligible", () => {

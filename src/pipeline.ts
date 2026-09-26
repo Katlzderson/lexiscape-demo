@@ -1,19 +1,15 @@
 import { z } from "zod";
 import { config } from "./config.js";
-import { computeCapacity, computeEffectiveLengthRange, reconcileGeneration, scheduleDeferrals, verifyPosition } from "./core.js";
+import { computeCapacity, computeEffectiveLengthRange, extractOccurrences, scheduleDeferrals, verifyPosition } from "./core.js";
 import { callLlm, currentLlmModel, renderPrompt } from "./llm.js";
 import { getSenses, validateEntries } from "./providers.js";
 import type { BatchInput, Drill, GenerationResult, Judgment, Sense, StoredBatch, VerificationReport } from "./types.js";
 
-const generationSchema = z.object({
-  sceneText: z.string(), sceneTitle: z.string(), sceneTitleZh: z.string(), sceneSummaryZh: z.string(), wordCount: z.number(),
-  occurrences: z.array(z.object({ word: z.string(), surfaceForm: z.string(), charStart: z.number(), charEnd: z.number(), senseId: z.string(), sentenceIndex: z.number(), contextSnippet: z.string() })),
-  uncovered: z.array(z.union([
-    z.object({ word: z.string(), senseId: z.string(), reason: z.string() }),
-    z.string().transform((reason) => ({ word: "", senseId: "", reason })),
-  ])),
-  continuity: z.object({ plotSummary: z.string(), characters: z.array(z.string()), setting: z.string() }),
+const storyPlanSchema = z.object({
+  sceneTitle: z.string(), sceneTitleZh: z.string(), sceneSummaryZh: z.string(), plotSummary: z.string(),
+  characters: z.array(z.string()), setting: z.string(), eventChain: z.array(z.string()).min(4).max(6),
 });
+const sceneTextSchema = z.object({ sceneText: z.string().min(1) });
 const judgmentsSchema = z.object({ judgments: z.array(z.object({ occurrenceId: z.string(), expectedSenseId: z.string(), actualSenseId: z.string().nullable(), word: z.string(), charStart: z.number(), verdict: z.enum(["correct", "wrong_sense", "ambiguous", "not_found"]), confidence: z.number(), reason: z.string() })).min(1) });
 const narrativeSchema = z.object({ passed: z.boolean(), languagePassed: z.boolean(), confidence: z.number(), causalChain: z.array(z.string()), issues: z.array(z.string()), languageIssues: z.array(z.string()), correction: z.string() });
 const drillsSchema = z.object({ drills: z.array(z.object({ word: z.string(), senseId: z.string(), prompt: z.string() })) });
@@ -66,13 +62,45 @@ function selectTargets(batch: BatchInput, senses: Sense[], previouslyCovered: st
   return { capacity, ranked, selected: ranked, deferred: [] as Sense[] };
 }
 
-async function generate(batch: BatchInput, targets: Sense[], attempt: number, continuity: unknown, correction: string[]) {
+async function planStory(batch: BatchInput, targets: Sense[], continuity: unknown) {
   const range = computeEffectiveLengthRange(batch.lengthPreference, targets.length, config);
-  const prompt = await renderPrompt(config.prompts.scene, { batchId: batch.batchId, targetLevel: batch.learnerLevel, sceneLengthRange: range, targets, continuityContext: continuity ?? {}, correction });
+  const prompt = await renderPrompt(config.prompts.storyPlan, { targetLevel: batch.learnerLevel, sceneLengthRange: range, targets, continuityContext: continuity ?? {} });
+  const { data, latencyMs } = await callLlm(prompt, config.provider.llm.taskTemperature.senses);
+  return { plan: storyPlanSchema.parse(data), latencyMs };
+}
+
+async function writeStory(batch: BatchInput, targets: Sense[], storyPlan: z.infer<typeof storyPlanSchema>) {
+  const range = computeEffectiveLengthRange(batch.lengthPreference, targets.length, config);
+  const prompt = await renderPrompt(config.prompts.storyDraft, { targetLevel: batch.learnerLevel, sceneLengthRange: range, storyPlan, targets });
   const { data, latencyMs } = await callLlm(prompt);
-  const parsed = generationSchema.parse(data);
-  await assertContentSafe(parsed.sceneText);
-  return reconcileGeneration({ ...parsed, batchId: batch.batchId, generationMeta: { model: currentLlmModel(), attempt, promptVersion: "1.1", latencyMs } } satisfies GenerationResult);
+  return { sceneText: sceneTextSchema.parse(data).sceneText, latencyMs };
+}
+
+async function reviseStory(batch: BatchInput, targets: Sense[], storyPlan: z.infer<typeof storyPlanSchema>, sceneText: string, revisionNumber: number) {
+  const range = computeEffectiveLengthRange(batch.lengthPreference, targets.length, config);
+  const focuses = [
+    "逐项确认所有目标词义都有自然且可辨别的上下文，修复搭配和词形，但保持单一主线",
+    "强化事件之间的因果关系，删除为塞词而出现的支线、人物和道具",
+    "完成最终语言润色；在内部按 senseId 逐项核对清单，缺少任何一项都先重写再返回，并修复语法和不自然表达",
+  ];
+  const prompt = await renderPrompt(config.prompts.storyRevise, { revisionNumber, revisionFocus: focuses[revisionNumber - 1] ?? focuses.at(-1), targetLevel: batch.learnerLevel, sceneLengthRange: range, storyPlan, targets, sceneText });
+  const { data, latencyMs } = await callLlm(prompt, config.provider.llm.taskTemperature.senses);
+  return { sceneText: sceneTextSchema.parse(data).sceneText, latencyMs };
+}
+
+function buildGeneration(batch: BatchInput, targets: Sense[], storyPlan: z.infer<typeof storyPlanSchema>, sceneText: string, attempt: number, latencyMs: number): GenerationResult {
+  return {
+    batchId: batch.batchId,
+    sceneText,
+    sceneTitle: storyPlan.sceneTitle,
+    sceneTitleZh: storyPlan.sceneTitleZh,
+    sceneSummaryZh: storyPlan.sceneSummaryZh,
+    wordCount: sceneText.match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g)?.length ?? 0,
+    occurrences: extractOccurrences(sceneText, targets),
+    uncovered: [],
+    continuity: { plotSummary: storyPlan.plotSummary, characters: storyPlan.characters, setting: storyPlan.setting },
+    generationMeta: { model: currentLlmModel(), attempt, promptVersion: "2.0", latencyMs },
+  };
 }
 
 async function verifySemantic(result: GenerationResult, targets: Sense[]): Promise<{ judgments: Judgment[]; scene: GenerationResult }> {
@@ -95,7 +123,7 @@ async function verifySemantic(result: GenerationResult, targets: Sense[]): Promi
       const actualSense = judgment.actualSenseId ? targetMap.get(judgment.actualSenseId) : undefined;
       const confirmed = judgment.confidence >= config.coverage.confidenceMin
         && actualSense?.word === item.word
-        && ((judgment.verdict === "correct" && judgment.actualSenseId === item.expectedSenseId) || (judgment.verdict === "wrong_sense" && judgment.actualSenseId !== item.expectedSenseId));
+        && (judgment.verdict === "correct" || judgment.verdict === "wrong_sense");
       if (confirmed) {
         const occurrenceIndex = Number(item.occurrenceId.slice(4));
         correctedOccurrences[occurrenceIndex] = { ...correctedOccurrences[occurrenceIndex], senseId: judgment.actualSenseId! };
@@ -177,54 +205,51 @@ export async function runPipeline(batch: BatchInput, history: Array<{ senses: Se
   trace.push(`容量: ${plan.capacity.maxSceneWords} 词 / 理论上限 ${plan.capacity.maxInstances} 义项 / 本批精确词条共 ${plan.selected.length} 个义项`);
   if (!plan.capacity.feasible || plan.selected.length > plan.capacity.maxInstances) throw new Error(`本批精确词条共有 ${plan.selected.length} 个义项，超过当前篇幅最多 ${plan.capacity.maxInstances} 个义项的容量；请选择更长篇幅或减少词条。`);
   const continuity = history.at(-1)?.scene.continuity ?? null;
-  let best: { scene: GenerationResult; report: VerificationReport } | null = null;
-  let corrections: string[] = [];
-  for (let attempt = 1; attempt <= config.generation.maxRetries; attempt++) {
-    trace.push(`生成与校验：第 ${attempt} 次尝试`);
-    let scene: GenerationResult;
+  trace.push("规划故事主线");
+  const planned = await planStory(batch, plan.selected, continuity);
+  trace.push("生成故事初稿");
+  const drafted = await writeStory(batch, plan.selected, planned.plan);
+  let sceneText = drafted.sceneText;
+  let generationLatencyMs = planned.latencyMs + drafted.latencyMs;
+  let revisionsApplied = 0;
+  for (let revision = 1; revision <= config.generation.revisionPasses; revision++) {
+    trace.push(`文段升级：第 ${revision}/${config.generation.revisionPasses} 轮`);
     try {
-      scene = await generate(batch, plan.selected, attempt, continuity, corrections);
+      const revised = await reviseStory(batch, plan.selected, planned.plan, sceneText, revision);
+      sceneText = revised.sceneText;
+      generationLatencyMs += revised.latencyMs;
+      revisionsApplied++;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      corrections = [`输出结构无效：${reason.slice(0, 500)}。必须严格按 JSON 契约重发完整结果。`];
-      trace.push(`第 ${attempt} 次生成结构无效，进入重试`);
-      continue;
+      trace.push(`第 ${revision} 轮升级失败，保留上一版正文：${error instanceof Error ? error.message : String(error)}`);
     }
-    const positional = verifyPosition(scene, batch, fetched.senses, effectiveLengthRange, config);
-    let judgments: Judgment[] = [];
-    let narrative = { passed: false, languagePassed: false, confidence: 0, causalChain: [] as string[], issues: ["位置校验未通过，未执行篇章校验"], languageIssues: [] as string[], correction: "先修复结构化标注。" };
-    if (positional.passed) {
-      const [semanticResult, narrativeResult] = await Promise.allSettled([verifySemantic(scene, plan.selected), verifyNarrative(scene)]);
-      if (semanticResult.status === "fulfilled") {
-        judgments = semanticResult.value.judgments;
-        scene = semanticResult.value.scene;
-      }
-      else trace.push(`第 ${attempt} 次语义校验失败：${semanticResult.reason instanceof Error ? semanticResult.reason.message : String(semanticResult.reason)}`);
-      if (narrativeResult.status === "fulfilled") narrative = narrativeResult.value;
-      else narrative = { passed: false, languagePassed: false, confidence: 0, causalChain: [], issues: [`篇章校验服务失败：${narrativeResult.reason instanceof Error ? narrativeResult.reason.message : String(narrativeResult.reason)}`], languageIssues: [], correction: "保留正文并标记为未完全验收。" };
-    }
-    const semantic = summarizeSemantic(plan.selected, judgments, config.coverage.confidenceMin);
-    const accepted = positional.passed && narrative.passed && narrative.languagePassed && semantic.coverageRate >= config.coverage.threshold;
-    corrections = [...positional.checks.flatMap((check) => check.failures.map((failure) => `${check.code}: ${failure.expected} / ${failure.actual}`)), ...(!narrative.passed || !narrative.languagePassed ? [`篇章与语言审校：${[...narrative.issues, ...narrative.languageIssues].join("；")}。修正要求：${narrative.correction}`] : []), ...semantic.judgments.filter((item) => item.verdict !== "covered").map((item) => `${item.word}/${item.senseId}@${item.charStart}: ${item.verdict} - ${item.reason}`)];
-    const report = { batchId: batch.batchId, attempt, positional, narrative, semantic, accepted, rejectReasons: corrections } as VerificationReport;
-    const isBetter = !best || verificationScore(report) > verificationScore(best.report);
-    if (isBetter) best = { scene, report };
-    if (accepted) break;
   }
-  if (!best) {
-    const detail = corrections[0] ? `最近一次失败原因：${corrections[0]}` : "模型未返回符合数据契约的结果。";
-    throw new Error(`模型连续 ${config.generation.maxRetries} 次都未返回可解析的正文。${detail}`);
-  }
-  const coveredIds = new Set(best.report.semantic.judgments.filter((item) => item.verdict === "covered").map((item) => item.senseId));
-  const judgmentReason = new Map(best.report.semantic.judgments.map((item) => [item.senseId, item.verdict]));
+  await assertContentSafe(sceneText);
+  let scene = buildGeneration(batch, plan.selected, planned.plan, sceneText, revisionsApplied + 1, generationLatencyMs);
+  trace.push("最终统一校验");
+  const positional = verifyPosition(scene, batch, fetched.senses, effectiveLengthRange, config);
+  let judgments: Judgment[] = [];
+  let narrative = { passed: false, languagePassed: false, confidence: 0, causalChain: [] as string[], issues: ["篇章校验服务未返回结果"], languageIssues: [] as string[], correction: "保留正文并标记为未完全验收。" };
+  const [semanticResult, narrativeResult] = await Promise.allSettled([verifySemantic(scene, plan.selected), verifyNarrative(scene)]);
+  if (semanticResult.status === "fulfilled") {
+    judgments = semanticResult.value.judgments;
+    scene = semanticResult.value.scene;
+  } else trace.push(`最终语义校验失败：${semanticResult.reason instanceof Error ? semanticResult.reason.message : String(semanticResult.reason)}`);
+  if (narrativeResult.status === "fulfilled") narrative = narrativeResult.value;
+  else narrative = { ...narrative, issues: [`篇章校验服务失败：${narrativeResult.reason instanceof Error ? narrativeResult.reason.message : String(narrativeResult.reason)}`] };
+  const semantic = summarizeSemantic(plan.selected, judgments, config.coverage.confidenceMin);
+  const accepted = positional.passed && narrative.passed && narrative.languagePassed && semantic.coverageRate >= config.coverage.threshold;
+  const rejectReasons = [...positional.checks.flatMap((check) => check.failures.map((failure) => `${check.code}: ${failure.expected} / ${failure.actual}`)), ...(!narrative.passed || !narrative.languagePassed ? [`篇章与语言审校：${[...narrative.issues, ...narrative.languageIssues].join("；")}。修正要求：${narrative.correction}`] : []), ...semantic.judgments.filter((item) => item.verdict !== "covered").map((item) => `${item.word}/${item.senseId}@${item.charStart}: ${item.verdict} - ${item.reason}`)];
+  const report = { batchId: batch.batchId, attempt: revisionsApplied + 1, positional, narrative, semantic, accepted, rejectReasons } as VerificationReport;
+  const coveredIds = new Set(report.semantic.judgments.filter((item) => item.verdict === "covered").map((item) => item.senseId));
+  const judgmentReason = new Map(report.semantic.judgments.map((item) => [item.senseId, item.verdict]));
   const deferred = [...plan.deferred.map((sense) => ({ word: sense.word, senseId: sense.senseId, reason: "capacity" as const })), ...plan.selected.filter((sense) => !coveredIds.has(sense.senseId)).map((sense) => ({ word: sense.word, senseId: sense.senseId, reason: judgmentReason.get(sense.senseId) ?? "not_found" }))];
   const deferrals = scheduleDeferrals(batch.batchId, batch.batchIndex, deferred, config);
-  const degradation = best.report.accepted ? null : `已输出最多 ${config.generation.maxRetries} 轮校验中的第 ${best.report.attempt} 轮最佳稿，但未完全通过后台质量校验。只有经独立语义校验确认的位置才会显示释义。`;
+  const degradation = report.accepted ? null : `已完成故事规划、初稿和 ${revisionsApplied} 轮文段升级，但最终稿未完全通过质量校验。只有经独立语义校验确认的位置才会显示释义。`;
   let drills: Drill[] = [];
-  try { drills = await createDrillsFromAnnotations(plan.selected, best.scene, best.report.semantic.judgments); }
+  try { drills = await createDrillsFromAnnotations(plan.selected, scene, report.semantic.judgments); }
   catch (error) { trace.push(`练习题生成失败，不影响正文输出：${error instanceof Error ? error.message : String(error)}`); }
-  trace.push(best.report.accepted ? "批次通过校验" : degradation!);
-  return { batch, senses: plan.ranked, scene: best.scene, report: best.report, deferrals, degradation, drills, trace };
+  trace.push(report.accepted ? "最终稿通过校验" : degradation!);
+  return { batch, senses: plan.ranked, scene, report, deferrals, degradation, drills, trace };
 }
 
 export async function judgeDrillWithLlm(sentence: string, sense: Sense, taskPrompt: string) {

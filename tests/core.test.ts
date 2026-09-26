@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { config } from "../src/config.js";
 import { computeCapacity, computeEffectiveLengthRange, normalizeBatch, reconcileGeneration, scheduleDeferrals, verifyPosition } from "../src/core.js";
+import { currentLlmModel, parseLlmCredentials, withLlmCredentials } from "../src/llm.js";
 import { summarizeSemantic, verificationScore, verifiedSenseIds } from "../src/pipeline.js";
 import type { GenerationResult, Sense, VerificationReport } from "../src/types.js";
 
@@ -115,4 +116,21 @@ test("learning targets require an exact independent semantic judgment", () => {
   const judgments = [{ senseId: "alpha-1", word: "alpha", charStart: 0, verdict: "covered" as const, confidence: 0.99, reason: "matched" }];
   assert.deepEqual([...verifiedSenseIds(scene, senses, judgments)], ["alpha-1"]);
   assert.deepEqual([...verifiedSenseIds(scene, senses, [{ ...judgments[0], charStart: -1, verdict: "not_found" }])], []);
+});
+
+test("BYOK credentials only accept registered providers and safe model ids", () => {
+  assert.equal(parseLlmCredentials({ provider: "openai", model: "gpt-4.1-mini", apiKey: "temporary-key" }).model, "gpt-4.1-mini");
+  assert.throws(() => parseLlmCredentials({ provider: "custom", model: "model", apiKey: "temporary-key" }));
+  assert.throws(() => parseLlmCredentials({ provider: "openai", model: "model name", apiKey: "temporary-key" }));
+});
+
+test("concurrent BYOK request contexts do not share model credentials", async () => {
+  const first = parseLlmCredentials({ provider: "openai", model: "model-a", apiKey: "temporary-key-a" });
+  const second = parseLlmCredentials({ provider: "deepseek", model: "model-b", apiKey: "temporary-key-b" });
+  const [firstModel, secondModel] = await Promise.all([
+    withLlmCredentials(first, async () => { await new Promise((resolve) => setImmediate(resolve)); return currentLlmModel(); }),
+    withLlmCredentials(second, async () => { await new Promise((resolve) => setImmediate(resolve)); return currentLlmModel(); }),
+  ]);
+  assert.deepEqual([firstModel, secondModel], ["model-a", "model-b"]);
+  assert.equal(currentLlmModel(), "unknown");
 });

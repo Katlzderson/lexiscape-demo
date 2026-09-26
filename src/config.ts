@@ -29,12 +29,8 @@ export const config = {
   provider: {
     sense: { order: ["dict-api", "llm"] as const, dictionaryEndpoint: "https://api.dictionaryapi.dev/api/v2/entries/en" },
     llm: {
-      endpoint: process.env.LLM_BASE_URL ?? "",
-      model: process.env.LLM_MODEL ?? "",
-      apiKey: process.env.LLM_API_KEY ?? "",
       maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 16384),
       jsonAttempts: 2,
-      thinking: process.env.LLM_THINKING === "true",
       temperature: 0.7,
       taskTemperature: { senses: 0.2, verifier: 0, coherence: 0, drill: 0.8 },
     },

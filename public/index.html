@@ -21,7 +21,7 @@
         <button class="tab" data-view="progress">学习进度</button>
       </nav>
       <div class="top-actions">
-        <span id="serviceStatus" class="service-status"><i data-lucide="circle"></i>检测服务</span>
+        <button id="modelConfigBtn" class="service-status" type="button" title="配置本次页面使用的模型"><i data-lucide="key-round"></i><span id="serviceStatus">配置模型</span></button>
         <button id="exportBtn" class="icon-btn" title="导出学习状态" aria-label="导出学习状态"><i data-lucide="download"></i></button>
         <button id="resetBtn" class="icon-btn" title="重置学习状态" aria-label="重置学习状态"><i data-lucide="rotate-ccw"></i></button>
       </div>
@@ -107,8 +107,21 @@
   </div>
 
   <dialog id="confirmDialog"><div class="dialog-icon"><i data-lucide="triangle-alert"></i></div><h2>重置全部学习状态？</h2><p>场景、义项轨迹和练习记录都会被清除，此操作无法撤销。</p><div><button id="cancelReset" class="secondary-btn">取消</button><button id="confirmReset" class="danger-btn">确认重置</button></div></dialog>
+  <dialog id="modelDialog" class="model-dialog">
+    <form id="modelForm" autocomplete="off">
+      <div class="dialog-icon model-icon"><i data-lucide="key-round"></i></div>
+      <span class="kicker">TEMPORARY BYOK</span>
+      <h2>连接你的模型</h2>
+      <p>配置仅保存在当前页面内存中，刷新或关闭页面即清除。调用期间，密钥会经 Lexiscape 服务端临时转发给你选择的模型供应商，但不会写入学习记录、服务器存储或日志。</p>
+      <label>模型供应商<select id="providerInput" required></select></label>
+      <label>模型名称<input id="modelInput" type="text" maxlength="120" pattern="[A-Za-z0-9._:/-]+" spellcheck="false" autocomplete="off" placeholder="例如：供应商控制台中的模型 ID" required></label>
+      <label>API Key<input id="apiKeyInput" type="password" minlength="8" maxlength="512" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true" placeholder="仅供当前页面临时调用" required></label>
+      <div class="credential-note"><i data-lucide="shield-check"></i><span>不提供“记住密钥”选项。请只在 HTTPS 网站上输入，并使用限额明确的专用 Key。</span></div>
+      <div class="dialog-actions"><button id="disconnectModel" class="secondary-btn hidden" type="button">断开</button><button id="cancelModel" class="secondary-btn" type="button">稍后配置</button><button class="primary-btn" type="submit">仅本次页面使用</button></div>
+    </form>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
-  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script src="/vendor/lucide/lucide.min.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

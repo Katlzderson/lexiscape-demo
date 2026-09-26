@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { config } from "./config.js";
 import { computeCapacity, computeEffectiveLengthRange, reconcileGeneration, scheduleDeferrals, verifyPosition } from "./core.js";
-import { callLlm, renderPrompt } from "./llm.js";
+import { callLlm, currentLlmModel, renderPrompt } from "./llm.js";
 import { getSenses, validateEntries } from "./providers.js";
 import type { BatchInput, Drill, GenerationResult, Judgment, Sense, StoredBatch, VerificationReport } from "./types.js";
 
@@ -72,7 +72,7 @@ async function generate(batch: BatchInput, targets: Sense[], attempt: number, co
   const { data, latencyMs } = await callLlm(prompt);
   const parsed = generationSchema.parse(data);
   await assertContentSafe(parsed.sceneText);
-  return reconcileGeneration({ ...parsed, batchId: batch.batchId, generationMeta: { model: config.provider.llm.model, attempt, promptVersion: "1.1", latencyMs } } satisfies GenerationResult);
+  return reconcileGeneration({ ...parsed, batchId: batch.batchId, generationMeta: { model: currentLlmModel(), attempt, promptVersion: "1.1", latencyMs } } satisfies GenerationResult);
 }
 
 async function verifySemantic(result: GenerationResult, targets: Sense[]): Promise<{ judgments: Judgment[]; scene: GenerationResult }> {

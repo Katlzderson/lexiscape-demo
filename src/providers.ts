@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "./config.js";
-import { callLlm, renderPrompt } from "./llm.js";
+import { callLlm, currentLlmCacheScope, renderPrompt } from "./llm.js";
 import type { Sense } from "./types.js";
 
 const rawSenseSchema = z.object({ pos: z.string(), zhDef: z.string(), enDef: z.string(), collocations: z.array(z.string()).min(2), examFreq: z.enum(["high", "medium", "low"]).optional(), note: z.string().optional(), surfaceForms: z.array(z.string()).optional(), phonetic: z.string().optional() });
@@ -41,7 +41,6 @@ export class DictionarySenseProvider implements SenseProvider {
     if (!Array.isArray(entries) || !entries.length) return [];
     const source = entries.flatMap((entry: any) => (entry.meanings ?? []).flatMap((meaning: any) => (meaning.definitions ?? []).map((definition: any) => ({ pos: meaning.partOfSpeech, enDef: definition.definition, example: definition.example ?? "" }))));
     if (!source.length) return [];
-    if (!config.provider.llm.apiKey) throw new Error("公共词典缺少中文释义和搭配；需配置模型完成运行时结构化补全");
     const prompt = await renderPrompt(config.prompts.senses, { word, dictionaryData: source });
     const { data } = await callLlm(prompt, config.provider.llm.taskTemperature.senses);
     return finalize(word, this.id, llmSenseSchema.parse(data).senses);
@@ -60,13 +59,15 @@ export async function validateEntries(entries: string[]) {
 
 export async function getSenses(words: string[]): Promise<{ senses: Sense[]; unavailable: string[]; trace: string[] }> {
   const trace: string[] = [], unavailable: string[] = [];
+  const cacheScope = currentLlmCacheScope();
   const all = await Promise.all(words.map(async (word) => {
-    if (cache.has(word)) { trace.push(`${word}: runtime-cache`); return cache.get(word)!; }
+    const cacheKey = `${cacheScope}:${word}`;
+    if (cache.has(cacheKey)) { trace.push(`${word}: runtime-cache`); return cache.get(cacheKey)!; }
     for (const providerName of config.provider.sense.order) {
       const provider = providerName === "dict-api" ? new DictionarySenseProvider() : new LlmSenseProvider();
       try {
         const senses = await provider.getSenses(word);
-        if (senses.length) { cache.set(word, senses); trace.push(`${word}: ${provider.id}`); return senses; }
+        if (senses.length) { cache.set(cacheKey, senses); trace.push(`${word}: ${provider.id}`); return senses; }
       } catch (error) { trace.push(`${word}: ${provider.id} 失败 (${error instanceof Error ? error.message : String(error)})`); }
     }
     unavailable.push(word); return [];

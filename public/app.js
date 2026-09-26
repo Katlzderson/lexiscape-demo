@@ -10,6 +10,7 @@ class BrowserStorage {
 const storage = new BrowserStorage();
 let state = storage.load();
 if (normalizeStoredDrillPrompts(state)) storage.save(state);
+let modelCredentials = null;
 let current = state.batches.at(-1) ?? null;
 let activeFilter = "all";
 const annotationReviewAttempts = new Set();
@@ -33,21 +34,54 @@ function normalizeStoredDrillPrompts(savedState) {
 function boot() {
   lucide.createIcons();
   bindEvents();
-  checkService();
+  void initializeModelConfiguration();
   updateBatchIndex();
   if (current && state.ui.learnMode === "batch") renderBatch(current);
   renderContexts();
   renderProgress();
 }
 
-async function checkService() {
-  const target = $("#serviceStatus");
+async function initializeModelConfiguration() {
   try {
-    const status = await fetch("/api/status").then((response) => response.json());
-    target.className = `service-status ${status.ready ? "ready" : "offline"}`;
-    target.innerHTML = `<i data-lucide="circle"></i>${status.ready ? "模型服务已连接" : "等待模型配置"}`;
-  } catch { target.className = "service-status offline"; target.innerHTML = `<i data-lucide="circle"></i>服务离线`; }
+    const payload = await fetch("/api/llm/providers", { cache:"no-store" }).then((response) => response.json());
+    $("#providerInput").innerHTML = payload.providers.map((provider) => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.label)}</option>`).join("");
+    updateModelStatus();
+    setTimeout(() => openModelDialog(), 0);
+  } catch { $("#modelConfigBtn").className = "service-status offline"; $("#serviceStatus").textContent = "服务离线"; }
+}
+
+function updateModelStatus() {
+  $("#modelConfigBtn").className = `service-status ${modelCredentials ? "ready" : "offline"}`;
+  $("#serviceStatus").textContent = modelCredentials ? "模型已就绪" : "配置模型";
+  $("#disconnectModel").classList.toggle("hidden", !modelCredentials);
+}
+
+function openModelDialog() {
+  $("#apiKeyInput").value = "";
+  if (modelCredentials) { $("#providerInput").value = modelCredentials.provider; $("#modelInput").value = modelCredentials.model; }
+  if (!$("#modelDialog").open) $("#modelDialog").showModal();
   lucide.createIcons();
+}
+
+function saveModelConfiguration(event) {
+  event.preventDefault();
+  modelCredentials = Object.freeze({ provider:$("#providerInput").value, model:$("#modelInput").value.trim(), apiKey:$("#apiKeyInput").value.trim() });
+  $("#apiKeyInput").value = "";
+  $("#modelDialog").close(); updateModelStatus(); toast("模型配置仅在当前页面生效");
+}
+
+function disconnectModel() {
+  modelCredentials = null; $("#modelForm").reset(); $("#apiKeyInput").value = ""; $("#modelDialog").close(); updateModelStatus(); toast("临时模型配置已清除");
+}
+
+function requireModelConfiguration() {
+  if (modelCredentials) return true;
+  openModelDialog(); toast("请先配置本次页面使用的模型"); return false;
+}
+
+async function modelFetch(url, payload) {
+  if (!modelCredentials) throw new Error("请先配置本次页面使用的模型");
+  return fetch(url, { method:"POST", cache:"no-store", headers:{ "content-type":"application/json" }, body:JSON.stringify({ ...payload, llm:modelCredentials }) });
 }
 
 function bindEvents() {
@@ -55,6 +89,10 @@ function bindEvents() {
   $$(".tab").forEach((button) => button.addEventListener("click", () => button.dataset.view === "learn" ? showComposer() : switchView(button.dataset.view)));
   $("#wordInput").addEventListener("input", updateInputHint);
   $("#batchForm").addEventListener("submit", generateBatch);
+  $("#modelConfigBtn").addEventListener("click", openModelDialog);
+  $("#modelForm").addEventListener("submit", saveModelConfiguration);
+  $("#cancelModel").addEventListener("click", () => $("#modelDialog").close());
+  $("#disconnectModel").addEventListener("click", disconnectModel);
   $("#homeBtn").addEventListener("click", showComposer);
   $("#annotationToggle").addEventListener("change", (event) => $("#sceneText").classList.toggle("annotations-off", !event.target.checked));
   document.addEventListener("pointerdown", (event) => {
@@ -87,12 +125,13 @@ function updateBatchIndex() { $("#nextBatchIndex").textContent = String(state.ba
 
 async function generateBatch(event) {
   event.preventDefault(); hideError();
+  if (!requireModelConfiguration()) return;
   const words = parseWords();
   if (new Set(words.map((word) => word.toLowerCase())).size < 3) return showError("至少输入 3 个不同的英文词条。单词或短语均可，请用换行或逗号分隔。");
   $("#composer").classList.add("hidden"); $("#workspace").classList.add("hidden"); $("#loadingPanel").classList.remove("hidden");
   animatePipeline();
   try {
-    const response = await fetch("/api/generate", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ rawInput:$("#wordInput").value, batchIndex:state.batches.length + 1, learnerLevel:$("#levelInput").value, examTarget:$("#examInput").value, lengthPreference:$("#lengthInput").value, history:state.batches.map(({ senses, scene, report }) => ({ senses, scene, report })) }) });
+    const response = await modelFetch("/api/generate", { rawInput:$("#wordInput").value, batchIndex:state.batches.length + 1, learnerLevel:$("#levelInput").value, examTarget:$("#examInput").value, lengthPreference:$("#lengthInput").value, history:state.batches.map(({ senses, scene, report }) => ({ senses, scene, report })) });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
     current = payload; state.batches.push(payload); state.ui.learnMode = "batch"; updateStreak(); storage.save(state);
@@ -122,12 +161,13 @@ function renderBatch(batch) {
 }
 
 async function reverifyAnnotations(batch) {
+  if (!modelCredentials) return;
   const batchId = batch.batch.batchId;
   if (annotationReviewAttempts.has(batchId)) return;
   annotationReviewAttempts.add(batchId);
   const banner = $("#degradationBanner"); banner.classList.remove("hidden"); banner.textContent = "正在按上下文重新校验旧批次标注…";
   try {
-    const response = await fetch("/api/annotations/reverify", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ senses:batch.senses, scene:batch.scene }) });
+    const response = await modelFetch("/api/annotations/reverify", { senses:batch.senses, scene:batch.scene });
     const payload = await response.json(); if (!response.ok) throw new Error(payload.error || `标注校验失败 (${response.status})`);
     batch.scene = payload.scene; batch.report.semantic = payload.semantic; batch.drills = [];
     batch.degradation = payload.semantic.coveredCount ? `旧批次标注已重新校验：仅展示 ${payload.semantic.coveredCount} 个经上下文确认的义项。` : "独立语义校验未能确认任何标注，本批次需要重新生成。";
@@ -224,7 +264,7 @@ function renderDrills(batch, generateIfMissing = true) {
 
 async function generateDrills(batch) {
   try {
-    const response = await fetch("/api/drills/generate", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ senses:batch.senses, scene:batch.scene, judgments:batch.report?.semantic?.judgments ?? [] }) });
+    const response = await modelFetch("/api/drills/generate", { senses:batch.senses, scene:batch.scene, judgments:batch.report?.semantic?.judgments ?? [] });
     const payload = await response.json(); if (!response.ok) throw new Error(payload.error || `练习生成失败 (${response.status})`);
     batch.drills = payload.drills ?? []; storage.save(state); renderDrills(batch, false);
   } catch { renderDrills(batch, false); }
@@ -236,7 +276,7 @@ async function judgeDrill(batch, drillId) {
   if (!sentence) return toast("请先写一个英文句子");
   const button = $(`.judge-btn[data-drill-id="${CSS.escape(drillId)}"]`); const panel = $(`#feedback-${CSS.escape(drillId)}`); button.disabled = true; button.textContent = "正在检查…";
   try {
-    const sense = batch.senses.find((item) => item.senseId === drill.senseId); const response = await fetch("/api/drill/judge", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ sentence,sense,prompt:drill.prompt }) }); const result = await response.json();
+    const sense = batch.senses.find((item) => item.senseId === drill.senseId); const response = await modelFetch("/api/drill/judge", { sentence,sense,prompt:drill.prompt }); const result = await response.json();
     if (!response.ok) throw new Error(result.error || `检查失败 (${response.status})`);
     const checks = [["题目要求",result.instructionFollowed],["指定词义",result.senseCorrect],["语法",result.grammarCorrect],["自然度",result.natural]].map(([label,passed]) => `${passed ? "通过" : "需修改"} · ${label}`);
     panel.textContent = `${checks.join("\n")}\n\n${result.feedback}${result.correctedSentence && result.correctedSentence !== sentence ? `\n\n推荐改写：${result.correctedSentence}` : ""}`; panel.classList.remove("hidden");
@@ -273,5 +313,7 @@ function resetState() { storage.reset(); state=storage.load(); current=null; $("
 function showError(message) { $("#errorMessage").textContent=message; $("#errorPanel").classList.remove("hidden"); lucide.createIcons(); }
 function hideError() { $("#errorPanel").classList.add("hidden"); }
 function toast(message) { const target=$("#toast");target.textContent=message;target.classList.add("show");setTimeout(()=>target.classList.remove("show"),2200); }
+
+window.addEventListener("pagehide", () => { modelCredentials = null; $("#apiKeyInput").value = ""; });
 
 boot();

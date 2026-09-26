@@ -6,6 +6,7 @@ import type { Sense } from "./types.js";
 const rawSenseSchema = z.object({ pos: z.string(), zhDef: z.string(), enDef: z.string(), collocations: z.array(z.string()).min(2), examFreq: z.enum(["high", "medium", "low"]).optional(), note: z.string().optional(), surfaceForms: z.array(z.string()).optional(), phonetic: z.string().optional() });
 const llmSenseSchema = z.object({ senses: z.array(rawSenseSchema).min(1) });
 const entryValidationSchema = z.object({ entries: z.array(z.object({ entry: z.string(), normalized: z.string(), valid: z.boolean(), reason: z.string() })) });
+const maxCommonSensesPerEntry = 10;
 
 export interface SenseProvider { id: string; getSenses(word: string): Promise<Sense[]> }
 
@@ -13,7 +14,18 @@ function finalize(word: string, id: string, values: z.infer<typeof rawSenseSchem
   const fetchedAt = new Date().toISOString();
   const entryTokens = word.toLowerCase().split(/\s+/);
   const commonValues = values.some((sense) => sense.examFreq !== "low") ? values.filter((sense) => sense.examFreq !== "low") : values;
-  return commonValues.map((sense, index) => {
+  const frequencyRank = { high: 0, medium: 1, low: 2 } as const;
+  const seen = new Set<string>();
+  const normalizedValues = commonValues
+    .filter((sense) => {
+      const key = `${sense.pos.trim().toLowerCase()}|${sense.zhDef.trim().toLowerCase()}|${sense.enDef.trim().toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => frequencyRank[left.examFreq ?? "medium"] - frequencyRank[right.examFreq ?? "medium"])
+    .slice(0, maxCommonSensesPerEntry);
+  return normalizedValues.map((sense, index) => {
     const surfaceForms = sense.surfaceForms?.filter((form) => {
       const formTokens = form.toLowerCase().trim().split(/\s+/);
       return formTokens.length === entryTokens.length

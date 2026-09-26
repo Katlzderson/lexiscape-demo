@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;600;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20260927-1">
+  <link rel="stylesheet" href="/styles.css?v=20260927-2">
 </head>
 <body>
   <div class="app-shell">
@@ -82,9 +82,12 @@
           <aside class="sense-column">
             <div class="sense-toolbar">
               <div><span class="kicker">SENSE MAP</span><h3>义项对照</h3></div>
-              <div class="filter-group" aria-label="义项筛选"><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="covered">已出现</button><button class="filter" data-filter="pending">未覆盖</button></div>
+              <button id="senseToggle" class="sense-toggle" type="button" aria-expanded="true" aria-controls="senseBody"><span>收起</span><i data-lucide="chevron-up"></i></button>
             </div>
-            <div id="senseList" class="sense-list"></div>
+            <div id="senseBody" class="sense-body">
+              <div class="filter-group" aria-label="义项筛选"><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="covered">已出现</button><button class="filter" data-filter="pending">未覆盖</button></div>
+              <div id="senseList" class="sense-list"></div>
+            </div>
           </aside>
           <section class="drill-section">
             <header><span class="kicker">ACTIVE RECALL</span><h2>换一个情境，再用一次</h2></header>
@@ -122,6 +125,6 @@
   </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/vendor/lucide/lucide.min.js"></script>
-  <script type="module" src="/app.js"></script>
+  <script type="module" src="/app.js?v=20260927-2"></script>
 </body>
 </html>

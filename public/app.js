@@ -34,6 +34,7 @@ function normalizeStoredDrillPrompts(savedState) {
 function boot() {
   lucide.createIcons();
   bindEvents();
+  setSensesCollapsed(Boolean(state.ui.sensesCollapsed), false);
   void initializeModelConfiguration();
   updateBatchIndex();
   if (current && state.ui.learnMode === "batch") renderBatch(current);
@@ -106,11 +107,24 @@ function bindEvents() {
     if (!event.target.closest("#occurrencePanel") && !event.target.closest("#sceneText mark")) closeOccurrence();
   });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeOccurrence(); });
+  $("#senseToggle").addEventListener("click", () => setSensesCollapsed(!$("#senseBody").hidden));
   $$(".filter").forEach((button) => button.addEventListener("click", () => { activeFilter = button.dataset.filter; $$(".filter").forEach((item) => item.classList.toggle("active", item === button)); renderSenses(current); }));
   $("#exportBtn").addEventListener("click", exportState);
   $("#resetBtn").addEventListener("click", () => $("#confirmDialog").showModal());
   $("#cancelReset").addEventListener("click", () => $("#confirmDialog").close());
   $("#confirmReset").addEventListener("click", resetState);
+}
+
+function setSensesCollapsed(collapsed, persist = true) {
+  const body = $("#senseBody");
+  const toggle = $("#senseToggle");
+  body.hidden = collapsed;
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  toggle.querySelector("span").textContent = collapsed ? "展开" : "收起";
+  if (persist) {
+    state.ui.sensesCollapsed = collapsed;
+    storage.save(state);
+  }
 }
 
 function showComposer() {
